@@ -28,7 +28,7 @@ df.replace("NP", np.nan, inplace=True)
 
 
 # Chosing one unique diffraction spectra to calc dislocation density (FWHM and angle info)
-SPECTRAS = np.arange(0, 2000, 100) # Number of the diffraction data
+SPECTRAS = np.arange(900, 1000, 100) # Number of the diffraction data
 
 
 fwhm = {}
@@ -63,7 +63,8 @@ class DislocationDensityMWH:
     def __init__(self):
         self.wavelength = 1.4235 # in nanometers
         self.planes = ["110", "200", "211", "220"]
-    
+        self.a_bcc = 2.87
+        self.a_fcc = 3.59
     
     # Calculating the K values for the different planes
     def K_values(self, angle, angle_1, angle_2):
@@ -127,6 +128,7 @@ class DislocationDensityMWH:
         
         alpha = np.arange(.0, .001, .00000001) # values of alpha to try
         h_squared = self.H_squared().values() # x values for the plot
+        new_x = np.arange(0, 8, .01)
         x = [i for i in h_squared]
         x = np.array(x).reshape((-1, 1))
 
@@ -135,6 +137,7 @@ class DislocationDensityMWH:
         best_r_sq = {}
         coef = {}
         intercept = {}
+        self.q = {}
         
         delta_k = delta_k.T
         k = k.T
@@ -146,7 +149,7 @@ class DislocationDensityMWH:
             coef[col] = 0
             intercept[col] = 0
             for num in alpha:
-                y = (delta_k[col]**2 - num) / k[col]**2
+                y =  (delta_k[col]**2 - num) / k[col]**2
                 # print(y)
                 model = LinearRegression().fit(x, y)
                 r_sq = model.score(x, y)
@@ -158,11 +161,162 @@ class DislocationDensityMWH:
                     intercept[col] = model.intercept_
                 p += 1
                 print(f"{p*100/(len(alpha)*len(delta_k.columns)):.2f} %")
+            self.q[col] = ( -1 * coef[col] ) / intercept[col]            
+            
+                
+            fig, ax = plt.subplots()
+            ax.scatter(h_squared,  ( (delta_k[col] - best_alpha[col]) / k[col] )**2)
+            ax.plot(new_x, intercept[col] + coef[col]*new_x)
+            plt.show()
+            
             print(f"Best value for {col}: {best_alpha[col]}")
             print(f"Best r_sq for {col}: {best_r_sq[col]:.2f}")
-        return dict(alpha=best_alpha, r_sq=best_r_sq, coef=coef, intercept=intercept)    
+            print(f"1/q for {col}: {-1 * intercept[col] / coef[col]}")
+            print(f"q for {col}: {-1 * coef[col] / intercept[col]}")
+        return dict(alpha=best_alpha, r_sq=best_r_sq, coef=coef, intercept=intercept, q=self.q)    
     
     
+    def q_theoretical(self, q, structure="BCC"):
+        
+        if structure.upper() == "BCC":
+            df_screw = pd.read_csv(f"abcd_parameters_for_q_screw_dislocation_bcc.txt", delimiter=";")
+            df_edge = pd.read_csv(f"abcd_parameters_for_q_edge_dislocation_bcc.txt", delimiter=";")
+            # c11, c12 and c44 were chosen from F. HajyAkbary et al. (2015) Materials Science & Engineering A 639
+            c11 = 230
+            c12 = 135
+            c44 = 117
+            
+            if abs(c12/c44 - 0.5) < abs(c12/c44 - 1) < abs(c12/c44 - 2):
+                a_q_screw = df_screw["c12/c44=0.5"][0]
+                b_q_screw = df_screw["c12/c44=0.5"][1]
+                c_q_screw = df_screw["c12/c44=0.5"][2]
+                d_q_screw = df_screw["c12/c44=0.5"][3]  
+                
+                a_q_edge = df_edge["c12/c44=0.5"][0]
+                b_q_edge = df_edge["c12/c44=0.5"][1]
+                c_q_edge = df_edge["c12/c44=0.5"][2]
+                d_q_edge = df_edge["c12/c44=0.5"][3]
+
+            elif abs(c12/c44 - 1) < abs(c12/c44 - 2):
+                a_q_screw = df_screw["c12/c44=1"][0]
+                b_q_screw = df_screw["c12/c44=1"][1]
+                c_q_screw = df_screw["c12/c44=1"][2]
+                d_q_screw = df_screw["c12/c44=1"][3]
+                
+                a_q_edge = df_edge["c12/c44=1"][0]
+                b_q_edge = df_edge["c12/c44=1"][1]
+                c_q_edge = df_edge["c12/c44=1"][2]
+                d_q_edge = df_edge["c12/c44=1"][3]
+
+            else:
+                a_q_screw = df_screw["c12/c44=2"][0]
+                b_q_screw = df_screw["c12/c44=2"][1]
+                c_q_screw = df_screw["c12/c44=2"][2]
+                d_q_screw = df_screw["c12/c44=2"][3]
+                
+                a_q_edge = df_edge["c12/c44=2"][0]
+                b_q_edge = df_edge["c12/c44=2"][1]
+                c_q_edge = df_edge["c12/c44=2"][2]
+                d_q_edge = df_edge["c12/c44=2"][3]
+
+   
+        elif structure.upper() == "FCC":
+            name = "fcc"
+            
+        else:
+            print("Invalid structure! Chose BCC or FCC!")
+                   
+
+        self.A = 2 * df.c44 / (df.c11 - df.c12) # Elastic anisotropy
+        self.q_screw = a_q_screw * (1 - np.exp(-self.A/b_q_screw)) + c_q_screw * self.A + d_q_screw # constant value for 100% screw dislocations
+        self.q_edge = a_q_edge * (1 - np.exp(-self.A/b_q_edge)) + c_q_edge * self.A + d_q_edge # constant value for 100% edge dislocations
+
+        f_edge = {}
+        f_screw = {}
+        for key in q:
+            f_edge[key] = ( self.q_screw - q[key] ) / ( self.q_screw - self.q_edge )  
+            f_screw[key] = 1- f_edge[key]
+        
+        return dict(f_edge=f_edge, f_screw=f_screw, q_screw=self.q_screw, q_edge=self.q_edge)
+
+    
+    def ch00(self, structure="BCC"):
+        q_theoretical = self.q_theoretical()
+        
+        if structure.upper() == "BCC":
+            df_ch00_edge = pd.read_csv("abcd_parameters_for_ch00_edge_dislocation_bcc.txt", delimiter=";")
+            c11 = 230
+            c12 = 135
+            c44 = 117
+            
+            # Os valores praticamente independem do c12/c44 para screw dislocations in BCC structure
+            a_ch00_screw = 0.174
+            b_ch00_screw = 1.9522
+            c_ch00_screw = 0.0293
+            d_ch00_screw = 0.0662
+
+            if abs(c12/c44 - 0.5) < abs(c12/c44 - 1) < abs(c12/c44 - 2):
+                a_ch00_edge = df_ch00_edge["c12/c44=0.5"][0]
+                b_ch00_edge = df_ch00_edge["c12/c44=0.5"][1]
+                c_ch00_edge = df_ch00_edge["c12/c44=0.5"][2]
+                d_ch00_edge = df_ch00_edge["c12/c44=0.5"][3]
+
+            elif abs(c12/c44 - 1) < abs(c12/c44 - 2):
+                a_ch00_edge = df_ch00_edge["c12/c44=1"][0]
+                b_ch00_edge = df_ch00_edge["c12/c44=1"][1]
+                c_ch00_edge = df_ch00_edge["c12/c44=1"][2]
+                d_ch00_edge = df_ch00_edge["c12/c44=1"][3]
+
+            else:
+                a_ch00_edge = df_ch00_edge["c12/c44=2"][0]
+                b_ch00_edge = df_ch00_edge["c12/c44=2"][1]
+                c_ch00_edge = df_ch00_edge["c12/c44=2"][2]
+                d_ch00_edge = df_ch00_edge["c12/c44=2"][3]
+
+        ch00_edge = a_ch00_edge * ( 1 - np.exp( - self.A / b_ch00_edge) ) + c_ch00_edge * self.A + d_ch00_edge
+        ch00_screw = a_ch00_screw * ( 1 - np.exp( - self.A / b_ch00_screw) ) + c_ch00_screw * self.A + d_ch00_screw
+        
+        ch00 = ( q_theoretical["f_edge"] * ch00_edge ) + ( q_theoretical["f_screw"] * ch00_screw )
+        
+        return ch00
+        
+        
+    def c(self, q):
+        q_theoretical = self.q_theoretical(q, structure="BCC")
+        ch00 = self.ch00(structure="BCC")
+        h_values = self.H_squared()
+        
+        df_c = pd.DataFrame()
+        df_c["planes"] = self.planes
+        df_c.set_index("planes", inplace=True)
+        for i in range(len(ch00)):
+            c = []
+            for j in self.planes:
+                c.append = ch00[i] * ( 1 - self.q[i] * h_values[j])
+            df_c[i] = c
+        
+        return df_c
+    
+    def b(self, structure="BCC"):
+
+        if structure.upper() == "BCC":
+            a = self.a_bcc
+        elif structure.upper() == "FCC":
+            a = self.a_fcc
+
+        b = {}
+        for i in self.planes:
+            plane = [int(i) for i in list(i)]           
+            b[i] = (a / 2) * np.sqrt(plane[0]**2 + plane[1]**2 + plane[2]**2)
+
+        if structure.upper() == "BCC":
+            return b["110"] # According to ref. T. Ungár et al. (1999) pag. 993
+        elif structure.upper() == "FCC":
+            return b["111"] # According to ref. T. Ungár et al. (1999) pag. 993
+        
+
+            
+        
     # def y_values(self, angle, fwhm):
     #     k = self.K_values(angle, fwhm)
     #     alpha = self.alpha_value(angle, angle_1, angle_2)
@@ -175,16 +329,19 @@ class DislocationDensityMWH:
         
         
 a = DislocationDensityMWH()
-k, delta_k = a.delta_k_values(angle, angle_1, angle_2)
-h_squared = a.H_squared()
-h_squared = [value for value in h_squared.values()]
-alpha = a.alpha_value(angle, angle_1, angle_2)
+# k, delta_k = a.delta_k_values(angle, angle_1, angle_2)
+# h_squared = a.H_squared()
+# h_squared = [value for value in h_squared.values()]
+# alpha = a.alpha_value(angle, angle_1, angle_2)
 # y_values = a.y_values(angle, fwhm)
+print(a.b())
+
+
 
 # print(new)
 
-print(alpha)
-print()
+# print(alpha)
+# print()
 # print(delta_k.T)
 
 
