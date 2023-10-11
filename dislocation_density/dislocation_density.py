@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.linear_model import LinearRegression
 import os
-
+from pprint import pprint
 
 # Name of coluns for data containing the FWHM values
 names = ["idx",
@@ -65,9 +65,9 @@ class DislocationDensityMWH:
         self.planes = ["110", "200", "211", "220"]
         self.a_bcc = 2.87
         self.a_fcc = 3.59
-    
+        self.alpha_range = np.arange(0, 1e-3, 1e-8)
     # Calculating the K values for the different planes
-    def K_values(self, angle, angle_1, angle_2):
+    def k_values(self, angle, angle_1, angle_2):
         """
             Calculates the K and Delta_K values. 
         """
@@ -79,12 +79,7 @@ class DislocationDensityMWH:
         for i in SPECTRAS:
             delta_k[i] = 2 * (np.sin(angle_2[i] - np.sin(angle_1[i]) / self.wavelength))
             
-        # print(delta_k)
-        return k, delta_k # Return a numpy array with k values
-    
-    
-    def delta_k_values(self, angle, angle_1, angle_2):
-        k, delta_k = self.K_values(angle, angle_1, angle_2)
+
         
         k_values = pd.DataFrame()
         k_values["measurement"] = k.keys()
@@ -108,7 +103,6 @@ class DislocationDensityMWH:
         return k_values, delta_k_values
     
 
-
     def H_squared(self):
         
         h_values = {}
@@ -124,11 +118,11 @@ class DislocationDensityMWH:
 
 
     def alpha_value(self, angle, angle_1, angle_2):
-        k, delta_k = self.delta_k_values(angle, angle_1, angle_2)
+        k, delta_k = self.k_values(angle, angle_1, angle_2)
         
-        alpha = np.arange(.0, .001, .00000001) # values of alpha to try
+        alpha = self.alpha_range # values of alpha to try
         h_squared = self.H_squared().values() # x values for the plot
-        new_x = np.arange(0, 8, .01)
+        new_x = np.arange(0, 1, .01)
         x = [i for i in h_squared]
         x = np.array(x).reshape((-1, 1))
 
@@ -137,7 +131,7 @@ class DislocationDensityMWH:
         best_r_sq = {}
         coef = {}
         intercept = {}
-        self.q = {}
+        q = {}
         
         delta_k = delta_k.T
         k = k.T
@@ -161,22 +155,40 @@ class DislocationDensityMWH:
                     intercept[col] = model.intercept_
                 p += 1
                 print(f"{p*100/(len(alpha)*len(delta_k.columns)):.2f} %")
-            self.q[col] = ( -1 * coef[col] ) / intercept[col]            
+            q[col] = ( -1 * coef[col] ) / intercept[col]            
             
                 
             fig, ax = plt.subplots()
-            ax.scatter(h_squared,  ( (delta_k[col] - best_alpha[col]) / k[col] )**2)
-            ax.plot(new_x, intercept[col] + coef[col]*new_x)
+            ax.scatter(h_squared,  ( (delta_k[col] - best_alpha[col]) / k[col] )**2, c="k")
+            ax.plot(new_x, intercept[col] + coef[col]*new_x, c="k")
+            ax.set_xlabel(r"H$^2$", size=15)
+            ax.set_ylabel(r"$\frac{(\Delta K^2 - \alpha)}{K^2}$", size=15)
+            ax.tick_params(axis="both", labelsize=12)
+            ax.set_ylim(0, )
+            ax.annotate(f"Measure: {col}", (0, .01))
+            ax.ticklabel_format(axis="y", style="sci", scilimits=(0,0), useMathText=True)
+            fig.tight_layout()
+            
+            try:
+                os.mkdir("q_results_plot")
+            except FileExistsError:
+                pass
+            
+            plt.savefig(f"q_results_plot/Measure_{col}.png")
+            
             plt.show()
             
             print(f"Best value for {col}: {best_alpha[col]}")
             print(f"Best r_sq for {col}: {best_r_sq[col]:.2f}")
             print(f"1/q for {col}: {-1 * intercept[col] / coef[col]}")
             print(f"q for {col}: {-1 * coef[col] / intercept[col]}")
-        return dict(alpha=best_alpha, r_sq=best_r_sq, coef=coef, intercept=intercept, q=self.q)    
+            
+        return dict(alpha=best_alpha, r_sq=best_r_sq, coef=coef, intercept=intercept, q=q)    
     
     
-    def q_theoretical(self, q, structure="BCC"):
+    def q_values(self, angle, angle_1, angle_2, structure="BCC"):
+        
+        q = self.alpha_value(angle, angle_1, angle_2)["q"]
         
         if structure.upper() == "BCC":
             df_screw = pd.read_csv(f"abcd_parameters_for_q_screw_dislocation_bcc.txt", delimiter=";")
@@ -227,21 +239,21 @@ class DislocationDensityMWH:
             print("Invalid structure! Chose BCC or FCC!")
                    
 
-        self.A = 2 * df.c44 / (df.c11 - df.c12) # Elastic anisotropy
-        self.q_screw = a_q_screw * (1 - np.exp(-self.A/b_q_screw)) + c_q_screw * self.A + d_q_screw # constant value for 100% screw dislocations
-        self.q_edge = a_q_edge * (1 - np.exp(-self.A/b_q_edge)) + c_q_edge * self.A + d_q_edge # constant value for 100% edge dislocations
+        A = 2 * c44 / (c11 - c12) # Elastic anisotropy
+        q_screw = a_q_screw * (1 - np.exp(-A/b_q_screw)) + c_q_screw * A + d_q_screw # constant value for 100% screw dislocations
+        q_edge = a_q_edge * (1 - np.exp(-A/b_q_edge)) + c_q_edge * A + d_q_edge # constant value for 100% edge dislocations
 
         f_edge = {}
         f_screw = {}
         for key in q:
-            f_edge[key] = ( self.q_screw - q[key] ) / ( self.q_screw - self.q_edge )  
+            f_edge[key] = ( q_screw - q[key] ) / ( q_screw - q_edge )  
             f_screw[key] = 1- f_edge[key]
         
-        return dict(f_edge=f_edge, f_screw=f_screw, q_screw=self.q_screw, q_edge=self.q_edge)
+        return dict(f_edge=f_edge, f_screw=f_screw, q_screw=q_screw, q_edge=q_edge, q=q, A=A)
 
     
     def ch00(self, structure="BCC"):
-        q_theoretical = self.q_theoretical()
+        q_theoretical = self.q_values()
         
         if structure.upper() == "BCC":
             df_ch00_edge = pd.read_csv("abcd_parameters_for_ch00_edge_dislocation_bcc.txt", delimiter=";")
@@ -282,7 +294,7 @@ class DislocationDensityMWH:
         
         
     def c(self, q):
-        q_theoretical = self.q_theoretical(q, structure="BCC")
+        q_theoretical = q_theoretical(q, structure="BCC")
         ch00 = self.ch00(structure="BCC")
         h_values = self.H_squared()
         
@@ -292,7 +304,7 @@ class DislocationDensityMWH:
         for i in range(len(ch00)):
             c = []
             for j in self.planes:
-                c.append = ch00[i] * ( 1 - self.q[i] * h_values[j])
+                c.append = ch00[i] * ( 1 - [i] * h_values[j])
             df_c[i] = c
         
         return df_c
@@ -315,26 +327,19 @@ class DislocationDensityMWH:
             return b["111"] # According to ref. T. Ungár et al. (1999) pag. 993
         
 
-            
-        
-    # def y_values(self, angle, fwhm):
-    #     k = self.K_values(angle, fwhm)
-    #     alpha = self.alpha_value(angle, angle_1, angle_2)
-    #     return dict(y=(k["delta_k"]**2 - alpha["alpha"]) / k["k"]**2, 
-    #                 alpha=alpha["alpha"], 
-    #                 r_sq=alpha["r_sq"], 
-    #                 coef=alpha["coef"],
-    #                 intercept=alpha["intercept"])
-        
-        
         
 a = DislocationDensityMWH()
-# k, delta_k = a.delta_k_values(angle, angle_1, angle_2)
+# k, delta_k = a.k_values(angle, angle_1, angle_2)
 # h_squared = a.H_squared()
 # h_squared = [value for value in h_squared.values()]
 # alpha = a.alpha_value(angle, angle_1, angle_2)
+# q = alpha["q"]
+q_values = a.q_values(angle, angle_1, angle_2)
 # y_values = a.y_values(angle, fwhm)
-print(a.b())
+pprint(q_values)
+print()
+print()
+# print(k)
 
 
 
