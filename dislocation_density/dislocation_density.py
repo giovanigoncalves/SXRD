@@ -59,14 +59,16 @@ for i in SPECTRAS:
 # Here we start the play
 
 class DislocationDensityMWH:
+    
     # Initial data (wavelength and phase planes for BCC)
     def __init__(self):
         self.wavelength = 1.4235 # in nanometers
         self.planes = ["110", "200", "211", "220"]
         self.a_bcc = 2.87
         self.a_fcc = 3.59
-        self.alpha_range = np.arange(0, 1e-3, 1e-8)
+        self.alpha_range = np.arange(0, 1e-3, 1e-6)
     # Calculating the K values for the different planes
+    
     def k_values(self, angle, angle_1, angle_2):
         """
             Calculates the K and Delta_K values. 
@@ -78,29 +80,8 @@ class DislocationDensityMWH:
             
         for i in SPECTRAS:
             delta_k[i] = 2 * (np.sin(angle_2[i] - np.sin(angle_1[i]) / self.wavelength))
-            
-
-        
-        k_values = pd.DataFrame()
-        k_values["measurement"] = k.keys()
-
-        for measure in range(len(self.planes)):
-            values = []
-            for i in k:
-                values.append(k[i][measure])
-            k_values[self.planes[measure]] = values
-        k_values.set_index("measurement", inplace=True)
-
-        delta_k_values = pd.DataFrame()
-        delta_k_values["measurement"] = delta_k.keys()
-        for measure in range(len(self.planes)):
-            values = []
-            for i in delta_k:
-                values.append(delta_k[i][measure])
-            delta_k_values[self.planes[measure]] = values
-        delta_k_values.set_index("measurement", inplace=True)
-
-        return k_values, delta_k_values
+          
+        return dict(k=k, delta_k=delta_k)
     
 
     def H_squared(self):
@@ -118,7 +99,7 @@ class DislocationDensityMWH:
 
 
     def alpha_value(self, angle, angle_1, angle_2):
-        k, delta_k = self.k_values(angle, angle_1, angle_2)
+        k = self.k_values(angle, angle_1, angle_2)
         
         alpha = self.alpha_range # values of alpha to try
         h_squared = self.H_squared().values() # x values for the plot
@@ -133,39 +114,35 @@ class DislocationDensityMWH:
         intercept = {}
         q = {}
         
-        delta_k = delta_k.T
-        k = k.T
-        
-        for col in delta_k.columns:
+        for key, value in k["delta_k"].items():
             p = 0
-            best_alpha[col] = 0
-            best_r_sq[col] = 0
-            coef[col] = 0
-            intercept[col] = 0
+            best_alpha[key] = 0
+            best_r_sq[key] = 0
+            coef[key] = 0
+            intercept[key] = 0
             for num in alpha:
-                y =  (delta_k[col]**2 - num) / k[col]**2
+                y =  (k["delta_k"][key]**2 - num) / k["k"][key]**2
                 # print(y)
                 model = LinearRegression().fit(x, y)
                 r_sq = model.score(x, y)
                 # print(r_sq)
-                if r_sq > best_r_sq[col]:
-                    best_r_sq[col] = r_sq
-                    best_alpha[col] = num
-                    coef[col] = model.coef_
-                    intercept[col] = model.intercept_
+                if r_sq > best_r_sq[key]:
+                    best_r_sq[key] = r_sq
+                    best_alpha[key] = num
+                    coef[key] = model.coef_
+                    intercept[key] = model.intercept_
                 p += 1
-                print(f"{p*100/(len(alpha)*len(delta_k.columns)):.2f} %")
-            q[col] = ( -1 * coef[col] ) / intercept[col]            
+                print(f"{p*100/(len(alpha)*len(k['delta_k'].keys())):.2f} %")
+            q[key] = ( -1 * coef[key] ) / intercept[key]            
             
-                
             fig, ax = plt.subplots()
-            ax.scatter(h_squared,  ( (delta_k[col] - best_alpha[col]) / k[col] )**2, c="k")
-            ax.plot(new_x, intercept[col] + coef[col]*new_x, c="k")
+            ax.scatter(h_squared, ((k["delta_k"][key] - best_alpha[key]) / k["k"][key] )**2, c="k")
+            ax.plot(new_x, intercept[key] + coef[key]*new_x, c="k")
             ax.set_xlabel(r"H$^2$", size=15)
             ax.set_ylabel(r"$\frac{(\Delta K^2 - \alpha)}{K^2}$", size=15)
             ax.tick_params(axis="both", labelsize=12)
             ax.set_ylim(0, )
-            ax.annotate(f"Measure: {col}", (0, .01))
+            ax.annotate(f"Measure: {key}", (0, .01))
             ax.ticklabel_format(axis="y", style="sci", scilimits=(0,0), useMathText=True)
             fig.tight_layout()
             
@@ -174,14 +151,14 @@ class DislocationDensityMWH:
             except FileExistsError:
                 pass
             
-            plt.savefig(f"q_results_plot/Measure_{col}.png")
+            plt.savefig(f"q_results_plot/Measure_{key}.png")
             
             plt.show()
             
-            print(f"Best value for {col}: {best_alpha[col]}")
-            print(f"Best r_sq for {col}: {best_r_sq[col]:.2f}")
-            print(f"1/q for {col}: {-1 * intercept[col] / coef[col]}")
-            print(f"q for {col}: {-1 * coef[col] / intercept[col]}")
+            print(f"Best value for {key}: {best_alpha[key]}")
+            print(f"Best r_sq for {key}: {best_r_sq[key]:.2f}")
+            print(f"1/q for {key}: {-1 * intercept[key] / coef[key]}")
+            print(f"q for {key}: {-1 * coef[key] / intercept[key]}")
             
         return dict(alpha=best_alpha, r_sq=best_r_sq, coef=coef, intercept=intercept, q=q)    
     
@@ -252,8 +229,9 @@ class DislocationDensityMWH:
         return dict(f_edge=f_edge, f_screw=f_screw, q_screw=q_screw, q_edge=q_edge, q=q, A=A)
 
     
-    def ch00(self, structure="BCC"):
-        q_theoretical = self.q_values()
+    def ch00(self, angle, angle_1, angle_2, structure="BCC"):
+        
+        q = self.q_values(angle, angle_1, angle_2, structure="BCC")
         
         if structure.upper() == "BCC":
             df_ch00_edge = pd.read_csv("abcd_parameters_for_ch00_edge_dislocation_bcc.txt", delimiter=";")
@@ -268,46 +246,44 @@ class DislocationDensityMWH:
             d_ch00_screw = 0.0662
 
             if abs(c12/c44 - 0.5) < abs(c12/c44 - 1) < abs(c12/c44 - 2):
-                a_ch00_edge = df_ch00_edge["c12/c44=0.5"][0]
-                b_ch00_edge = df_ch00_edge["c12/c44=0.5"][1]
-                c_ch00_edge = df_ch00_edge["c12/c44=0.5"][2]
-                d_ch00_edge = df_ch00_edge["c12/c44=0.5"][3]
+                a_ch00_edge = float(df_ch00_edge["c12/c44=0.5"][0])
+                b_ch00_edge = float(df_ch00_edge["c12/c44=0.5"][1])
+                c_ch00_edge = float(df_ch00_edge["c12/c44=0.5"][2])
+                d_ch00_edge = float(df_ch00_edge["c12/c44=0.5"][3])
 
             elif abs(c12/c44 - 1) < abs(c12/c44 - 2):
-                a_ch00_edge = df_ch00_edge["c12/c44=1"][0]
-                b_ch00_edge = df_ch00_edge["c12/c44=1"][1]
-                c_ch00_edge = df_ch00_edge["c12/c44=1"][2]
-                d_ch00_edge = df_ch00_edge["c12/c44=1"][3]
+                a_ch00_edge = float(df_ch00_edge["c12/c44=1"][0])
+                b_ch00_edge = float(df_ch00_edge["c12/c44=1"][1])
+                c_ch00_edge = float(df_ch00_edge["c12/c44=1"][2])
+                d_ch00_edge = float(df_ch00_edge["c12/c44=1"][3])
 
             else:
-                a_ch00_edge = df_ch00_edge["c12/c44=2"][0]
-                b_ch00_edge = df_ch00_edge["c12/c44=2"][1]
-                c_ch00_edge = df_ch00_edge["c12/c44=2"][2]
-                d_ch00_edge = df_ch00_edge["c12/c44=2"][3]
+                a_ch00_edge = float(df_ch00_edge["c12/c44=2"][0])
+                b_ch00_edge = float(df_ch00_edge["c12/c44=2"][1])
+                c_ch00_edge = float(df_ch00_edge["c12/c44=2"][2])
+                d_ch00_edge = float(df_ch00_edge["c12/c44=2"][3])
 
-        ch00_edge = a_ch00_edge * ( 1 - np.exp( - self.A / b_ch00_edge) ) + c_ch00_edge * self.A + d_ch00_edge
-        ch00_screw = a_ch00_screw * ( 1 - np.exp( - self.A / b_ch00_screw) ) + c_ch00_screw * self.A + d_ch00_screw
+        ch00_edge = a_ch00_edge * ( 1 - np.exp( - float(q["A"]) / b_ch00_edge) ) + c_ch00_edge * float(q["A"]) + d_ch00_edge
+        ch00_screw = a_ch00_screw * ( 1 - np.exp( - float(q["A"]) / b_ch00_screw) ) + c_ch00_screw * float(q["A"]) + d_ch00_screw
         
-        ch00 = ( q_theoretical["f_edge"] * ch00_edge ) + ( q_theoretical["f_screw"] * ch00_screw )
+        ch00 = {key: float(q["f_edge"][key]) * ch00_edge + float(q["f_screw"][key]) * ch00_screw for key, value in q["f_edge"].items()}
+ 
+        return dict(ch00_edge=ch00_edge, ch00_screw=ch00_screw, ch00=ch00, q=q)
         
-        return ch00
         
-        
-    def c(self, q):
-        q_theoretical = q_theoretical(q, structure="BCC")
-        ch00 = self.ch00(structure="BCC")
+    def c(self, angle, angle_1, angle_2, structure="BCC"):
+        ch00 = self.ch00(angle, angle_1, angle_2)
         h_values = self.H_squared()
         
-        df_c = pd.DataFrame()
-        df_c["planes"] = self.planes
-        df_c.set_index("planes", inplace=True)
-        for i in range(len(ch00)):
-            c = []
+        c = {}
+        for key, value in ch00["ch00"].items():
+            l = []
             for j in self.planes:
-                c.append = ch00[i] * ( 1 - [i] * h_values[j])
-            df_c[i] = c
+                l.append(ch00["ch00"][key] * ( 1 - ch00["ch00"][key] * h_values[j]))
+            c[key] = l
         
-        return df_c
+        return c
+     
     
     def b(self, structure="BCC"):
 
@@ -326,95 +302,71 @@ class DislocationDensityMWH:
         elif structure.upper() == "FCC":
             return b["111"] # According to ref. T. Ungár et al. (1999) pag. 993
         
-
         
+    def dislocation_density(self, angle, angle_1, angle_2, structure="BCC", M=1.4):
+        '''
+            M value according to ref: F. HajyAkbary et al. (2015)
+        '''
+        
+        b = self.b()
+        c = self.c(angle, angle_1, angle_2)
+        k = self.k_values(angle, angle_1, angle_2)
+      
+        coef = {}
+        intercept = {}
+        r_sq = {}
+        fig, ax = plt.subplots()
+        for key, value in k["k"].items():
+        
+            x = k["k"][key]*np.sqrt(c[key])    
+            new_x = np.linspace(x.min(), x.max(), 1000)
+            x_ = np.array(x).reshape((-1, 1))
+            
+            
+            y =  k["delta_k"][key]
+            # print(y)
+            model = LinearRegression().fit(x_, y)
+            r_sq[key] = model.score(x_, y)
+            intercept[key] = model.intercept_
+            coef[key] = model.coef_
+            
+            fig, ax = plt.subplots()
+            ax.scatter(x, y, c="k")
+            ax.plot(new_x, intercept[key] + coef[key]*new_x, c="k")
+            ax.set_xlabel(r"K$\overline{C}$$^{1/2}$ (nm$^{-1}$)", size=15)
+            ax.set_ylabel(r"$\Delta K$ (nm$^{-1}$)", size=15)
+            ax.tick_params(axis="both", labelsize=12)
+            # ax.set_ylim(0, )
+            # ax.annotate(f"Measure: {key}", (0, .01))
+            ax.ticklabel_format(axis="y", style="sci", scilimits=(0,0), useMathText=True)
+            fig.tight_layout()
+        
+            try:
+                os.mkdir("dislocation_density_MWH_method_plot")
+            except FileExistsError:
+                pass
+            
+            plt.savefig(f"dislocation_density_MWH_method_plot/Measure_{key}.png")
+        
+        rho = {key: 1e20 * 2 * coef[key]**2 / (b**2 * M**2 * np.pi) for key, value in coef.items()}
+
+        return rho
+
+
 a = DislocationDensityMWH()
-# k, delta_k = a.k_values(angle, angle_1, angle_2)
+# k= a.k_values(angle, angle_1, angle_2)
+
+# k = k.to_dict()
 # h_squared = a.H_squared()
 # h_squared = [value for value in h_squared.values()]
 # alpha = a.alpha_value(angle, angle_1, angle_2)
 # q = alpha["q"]
-q_values = a.q_values(angle, angle_1, angle_2)
-# y_values = a.y_values(angle, fwhm)
-pprint(q_values)
-print()
-print()
-# print(k)
+# q_values = a.q_values(angle, angle_1, angle_2)
+# ch00 = a.ch00(angle, angle_1, angle_2)
+# c = a.c(angle, angle_1, angle_2)
+
+dis = a.dislocation_density(angle, angle_1, angle_2)
 
 
 
-# print(new)
-
-# print(alpha)
-# print()
-# print(delta_k.T)
-
-
-# a = {"angle": [1, 2, 3, 4, 5, 6, 7, 8, 9], "intensity": [10, 20, 30], "failure": [80, 45, 25, 35]}
-
-# for k, v in a.items():
-#     print(v)
-
-# # Plotting condition x delta K
-# fig, ax = plt.subplots()
-
-# for col in delta_k.columns:
-#     ax.scatter(delta_k.index, delta_k[col], label=f"Medida: {col}", marker="^")
-# plt.show()
-
-
-
-# planes = ["111", "200", "220", "222"]
-
-# fig, ax = plt.subplots()
-# ax.set_title("BCC", size=15)
-# ax.scatter(k["k"], k["delta_k"], facecolors="none", edgecolors="k", marker="*", s=95)
-# ax.set_xlabel(r"K (nm$^{-1}$)", size=15)
-# ax.set_ylabel(r"$\Delta$K (nm$^{-1}$)", size=15)
-# ax.tick_params(axis="both", labelsize=12)
-# ax.ticklabel_format(axis="both", style="sci", scilimits=(0,0), useMathText=True)
-
-# for i in range(len(planes)):
-#     ax.annotate("{" + planes[i] + "}", (1.01*k["k"][i], 1.01*k["delta_k"][i]), fontsize=12)
-# ax.set_xlim(0, .12)
-# ax.set_ylim(0., .12)
-
-# fig.tight_layout()
-
-
-
-
-
-
-
-# fig1, ax1 = plt.subplots()
-# ax1.set_title("BCC", size=15)
-# ax1.scatter(h_squared, (delta_k.T[100] - 0.00000)**2 / k.T[100]**2, facecolors="none", edgecolors="k", marker="*", s=95)
-# ax1.set_xlabel(r"H$^2$", size=15)
-# ax1.set_ylabel(r"$\frac{\left(\Delta K - \alpha \right)^2}{k^2}$", size=15)
-# ax1.tick_params(axis="both", labelsize=12)
-# ax1.ticklabel_format(axis="both", style="sci", scilimits=(0,0), useMathText=True)
-
-# print(delta_k.T)
-
-# print()
-# print(delta_k)
-# print()
-# print()
-# for i in range(len(planes)):
-#     ax1.annotate("{" + planes[i] + "}", (1.01*h_squared[i], 1.01*y_values["y"][i]), fontsize=12)
-    
-# ax1.annotate(f"R²: {y_values['r_sq']:.4f}", (.25, y_values["y"].max()), fontsize=12)
-# ax1.annotate(rf"$\alpha$: {y_values['alpha']}", (.25, y_values["y"].max()*.975), fontsize=12)
-
-# # ax.set_xlim(0, .12)
-# # ax.set_ylim(0., .2)
-
-# x1 = np.arange(-.02, .35, .01)
-# ax1.plot(x1, y_values["coef"] * x1 + y_values["intercept"])
-# ax1.annotate(rf"q: {- float(y_values['coef']) / float(y_values['intercept']):.3f}", (.25, y_values["y"].max()*.95), fontsize=12)
-
-
-# fig1.tight_layout()
-
-# plt.show()
+pprint(dis)
