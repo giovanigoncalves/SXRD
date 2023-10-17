@@ -29,7 +29,7 @@ df.replace("NP", np.nan, inplace=True)
 
 
 # Chosing one unique diffraction spectra to calc dislocation density (FWHM and angle info)
-SPECTRAS = np.arange(1, 2295, 1) # Number of the diffraction data
+SPECTRAS = np.arange(0, 2295, 1) # Number of the diffraction data
 
 
 fwhm = {}
@@ -71,7 +71,7 @@ class DislocationDensityMWH:
         
         self.a_bcc = 2.87
         self.a_fcc = 3.59
-        self.alpha_range = np.arange(0, 1e-3, 1e-8)
+        self.alpha_range = np.arange(0, 1e-3, 1e-4)
         
         
     # Calculating the K values for the different planes
@@ -169,10 +169,10 @@ class DislocationDensityMWH:
             
             # plt.show()
             
-            print(f"Best value for {key}: {best_alpha[key]}")
-            print(f"Best r_sq for {key}: {best_r_sq[key]:.2f}")
-            print(f"1/q for {key}: {-1 * intercept[key] / coef[key]}")
-            print(f"q for {key}: {-1 * coef[key] / intercept[key]}")
+            # print(f"Best value for {key}: {best_alpha[key]}")
+            # print(f"Best r_sq for {key}: {best_r_sq[key]:.2f}")
+            # print(f"1/q for {key}: {-1 * intercept[key] / coef[key]}")
+            # print(f"q for {key}: {-1 * coef[key] / intercept[key]}")
             
         return dict(alpha=best_alpha, r_sq=best_r_sq, coef=coef, intercept=intercept, q=q)    
     
@@ -277,8 +277,8 @@ class DislocationDensityMWH:
             f_screw[key] = 1- f_edge[key]
 
             print("\n\n")
-            print(f"f_q_screw for {key}: {float(f_screw[key]):.1f} %")
-            print(f"f_q_edge for {key}: {float(f_edge[key]):.1f} %")
+            print(f"f_q_screw for {key}: {100 * float(f_screw[key]):.1f} %")
+            print(f"f_q_edge for {key}: {100 * float(f_edge[key]):.1f} %")
             print("\n\n")
             
         return dict(f_edge=f_edge, f_screw=f_screw, q_screw=q_screw, q_edge=q_edge, q=q, A=A, r_sq=r_sq, intercept=intercept)
@@ -458,18 +458,22 @@ class DislocationDensityMWH:
                            "std_grain": std_value(intercept_grain[key], r_sq_1[key], r_sq_2[key])
                            } for key, value in rho.items()}
         
-        cols = [i for i in rho_value.keys()]
+        names = [i for i in rho_value.keys()]
         values = [[rho_value[col]["D"], 
                    rho_value[col]["std_grain"], 
                    float(rho_value[col]["rho"]), 
                    float(rho_value[col]["std"])
-                   ] for col in cols]
+                   ] for col in names]
+        files = [i+1 for i in names]
+        # print(values)
+        cols = ["D", "std_grain", "rho", "std"]
         
-        df = pd.DataFrame(np.array(values).reshape(-1, 1), columns=cols)
-        df["idx"] = ["D", "std_grain", "rho", "std_rho"]
-        df.set_index("idx", inplace=True)
-        
-        df.T.to_csv("dislocation_density_data.txt", sep=",")
+        df = pd.DataFrame(values, columns=cols)
+        df["names"] = files
+        df.set_index("names", inplace=True)
+        print(df)
+
+        df.to_csv("dislocation_density_data.txt", sep=",")
 
         # pprint(rho_value)
         return rho_value 
