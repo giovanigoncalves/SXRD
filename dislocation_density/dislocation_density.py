@@ -452,7 +452,7 @@ class DislocationDensityMWH:
         
         
         def rho_f(coef, b, M):
-            return 1e20 * 2 * coef**2 / (b**2 * M**2 * np.pi)
+            return 1e20 * 2 * coef**2 / (b**2 * M**2 * np.pi) #in 1/m²
         
         def std_value(value, r_sq_1, r_sq_2):
             return 2 * value * (1 - (r_sq_1 * r_sq_2))
