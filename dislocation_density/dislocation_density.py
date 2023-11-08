@@ -410,46 +410,87 @@ class DislocationDensityMWH:
         b = self.b()
         c, r_sq_1, intercept_grain, f_edge, f_screw = self.c(angle, fwhm)
         k = self.k_values(angle, fwhm)
-      
-        coef = {}
-        intercept = {}
-        r_sq_2 = {}
-        fig, ax = plt.subplots()
-        for key, value in k["k"].items():
-        
-            x = np.array(k["k"][key]) * np.sqrt(np.array(c[key]))
-            # print(x)    
-            x_ = np.array(x).reshape((-1, 1))
-            # print(x_)
-            new_x = np.linspace(x.min(), x.max(), 1000)
-            
-            
-            y =  k["delta_k"][key]
-            # print(y)
-            model = LinearRegression().fit(x_, y)
-            r_sq_2[key] = model.score(x_, y)
-            intercept[key] = model.intercept_
-            coef[key] = model.coef_
-            
+
+        if self.structure.upper() == "BCC":
+            coef = {}
+            intercept = {}
+            r_sq_2 = {}
             fig, ax = plt.subplots()
-            ax.plot(x, y, c="k", marker="o", mfc="white", ls="")
-            ax.plot(new_x, intercept[key] + coef[key]*new_x, c="k")
-            ax.set_xlabel(r"K$\overline{C}$$^{1/2}$ (nm$^{-1}$)", size=15)
-            ax.set_ylabel(r"$\Delta K$ (nm$^{-1}$)", size=15)
-            ax.tick_params(axis="both", labelsize=12)
-            # ax.set_ylim(0, )
-            # ax.annotate(f"Measure: {key}", (0, .01))
-            ax.ticklabel_format(axis="both", style="sci", scilimits=(0,0), useMathText=True)
-            ax.minorticks_on()
-            fig.tight_layout()
-        
-            try:
-                os.mkdir("dislocation_density_MWH_method_plot")
-            except FileExistsError:
-                pass
+            for key, value in k["k"].items():
             
-            plt.savefig(f"dislocation_density_MWH_method_plot/Measure_{50 + 100 * (key)}.png")
+                x = np.array(k["k"][key]) * np.sqrt(np.array(c[key]))
+                # print(x)    
+                x_ = np.array(x).reshape((-1, 1))
+                # print(x_)
+                new_x = np.linspace(x.min(), x.max(), 1000)
+                
+                
+                y =  k["delta_k"][key]
+                # print(y)
+                model = LinearRegression().fit(x_, y)
+                r_sq_2[key] = model.score(x_, y)
+                intercept[key] = model.intercept_
+                coef[key] = model.coef_
+                
+                fig, ax = plt.subplots()
+                ax.plot(x, y, c="k", marker="o", mfc="white", ls="")
+                ax.plot(new_x, intercept[key] + coef[key]*new_x, c="k")
+                ax.set_xlabel(r"K$\overline{C}$$^{1/2}$ (nm$^{-1}$)", size=15)
+                ax.set_ylabel(r"$\Delta K$ (nm$^{-1}$)", size=15)
+                ax.tick_params(axis="both", labelsize=12)
+                # ax.set_ylim(0, )
+                # ax.annotate(f"Measure: {key}", (0, .01))
+                ax.ticklabel_format(axis="both", style="sci", scilimits=(0,0), useMathText=True)
+                ax.minorticks_on()
+                fig.tight_layout()
+            
+                try:
+                    os.mkdir("dislocation_density_MWH_method_plot")
+                except FileExistsError:
+                    pass
+                
+                plt.savefig(f"dislocation_density_MWH_method_plot/Measure_{50 + 100 * (key)}.png")
         
+        elif self.structure.upper() == "FCC":
+            Wg = {"111": .43, "200": 1.0, "220": .71, "311": .45}
+            coef = {}
+            intercept = {}
+            r_sq_2 = {}
+            fig, ax = plt.subplots()
+            for key, value in k["k"].items():
+            
+                x = np.array(k["k"][key]) * np.sqrt(np.array(c[key]))
+                # print(x)    
+                x_ = np.array(x).reshape((-1, 1))
+                # print(x_)
+                new_x = np.linspace(x.min(), x.max(), 1000)
+                
+                
+                y =  k["delta_k"][key]
+                # print(y)
+                model = LinearRegression().fit(x_, y)
+                r_sq_2[key] = model.score(x_, y)
+                intercept[key] = model.intercept_
+                coef[key] = model.coef_
+                
+                fig, ax = plt.subplots()
+                ax.plot(x, y, c="k", marker="o", mfc="white", ls="")
+                ax.plot(new_x, intercept[key] + coef[key]*new_x, c="k")
+                ax.set_xlabel(r"K$\overline{C}$$^{1/2}$ (nm$^{-1}$)", size=15)
+                ax.set_ylabel(r"$\Delta K$ (nm$^{-1}$)", size=15)
+                ax.tick_params(axis="both", labelsize=12)
+                # ax.set_ylim(0, )
+                # ax.annotate(f"Measure: {key}", (0, .01))
+                ax.ticklabel_format(axis="both", style="sci", scilimits=(0,0), useMathText=True)
+                ax.minorticks_on()
+                fig.tight_layout()
+            
+                try:
+                    os.mkdir("dislocation_density_MWH_method_plot")
+                except FileExistsError:
+                    pass
+                
+                plt.savefig(f"dislocation_density_MWH_method_plot/Measure_{50 + 100 * (key)}.png")
         
         def rho_f(coef, b, M):
             return 1e20 * 2 * coef**2 / (b**2 * M**2 * np.pi) #in 1/m²
