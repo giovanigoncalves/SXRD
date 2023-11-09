@@ -24,7 +24,7 @@ names = ["idx",
         ]
 
 # Loading the data containing FWHM values
-df = pd.read_excel("gg_qp_250_2h.xlsx", skiprows=1, names=names)
+df = pd.read_excel("Juan_diffraction.xlsx", skiprows=1, names=names)
 df.replace("NP", np.nan, inplace=True)
 
 
@@ -458,7 +458,7 @@ class DislocationDensityMWH:
             r_sq_2 = {}
             fig, ax = plt.subplots()
             for key, value in k["k"].items():
-            
+             
                 x = np.array(k["k"][key]) * np.sqrt(np.array(c[key]))
                 # print(x)    
                 x_ = np.array(x).reshape((-1, 1))
@@ -466,7 +466,7 @@ class DislocationDensityMWH:
                 new_x = np.linspace(x.min(), x.max(), 1000)
                 
                 
-                y =  k["delta_k"][key]
+                y =  (k["delta_k"][key] - beta_prime * Wg[key])**2 - alfa
                 # print(y)
                 model = LinearRegression().fit(x_, y)
                 r_sq_2[key] = model.score(x_, y)
