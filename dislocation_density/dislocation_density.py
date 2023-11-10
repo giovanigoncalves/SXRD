@@ -5,6 +5,8 @@ from sklearn.linear_model import LinearRegression
 import os
 from pprint import pprint
 import json
+from scipy.optimize import curve_fit
+from sklearn.metrics import r2_score
 
 # Name of coluns for data containing the FWHM values
 names = ["idx",
@@ -29,19 +31,19 @@ df.replace("NP", np.nan, inplace=True)
 
 
 # Chosing one unique diffraction spectra to calc dislocation density (FWHM and angle info)
-SPECTRAS = np.arange(0, 21, 1) # Number of the diffraction data
-
+SPECTRAS = np.arange(0, 14, 1) # Number of the diffraction data
+INSTRUMENTAL_BROADENING = 0.0160558308639235
 
 fwhm = {}
 angle = {}
 
-struc = "BCC"
+struc = "FCC"
 if struc == "BCC":
     for i in SPECTRAS:
-        fwhm[i] = [df.M110_fwhm[i] - 0.0160558308639235, 
-                   df.M200_fwhm[i] - 0.0160558308639235, 
-                   df.M211_fwhm[i] - 0.0160558308639235, 
-                   df.M220_fwhm[i] - 0.0160558308639235]
+        fwhm[i] = [df.M110_fwhm[i] - INSTRUMENTAL_BROADENING, 
+                   df.M200_fwhm[i] - INSTRUMENTAL_BROADENING, 
+                   df.M211_fwhm[i] - INSTRUMENTAL_BROADENING, 
+                   df.M220_fwhm[i] - INSTRUMENTAL_BROADENING]
         fwhm[i] = np.array([float(n) for n in fwhm[i]])
         fwhm[i] = np.array([np.deg2rad(n) for n in fwhm[i]]) # Transforming the fwhm from degree to radians
         
@@ -50,7 +52,11 @@ if struc == "BCC":
 
 elif struc == "FCC":
     for i in SPECTRAS:
-        fwhm[i] = [df.A111_fwhm[i], df.A200_fwhm[i], df.A220_fwhm[i], df.A311_fwhm[i], df.A222_fwhm[i]]
+        fwhm[i] = [df.A111_fwhm[i] - INSTRUMENTAL_BROADENING, 
+                   df.A200_fwhm[i] - INSTRUMENTAL_BROADENING, 
+                   df.A220_fwhm[i] - INSTRUMENTAL_BROADENING, 
+                   df.A311_fwhm[i] - INSTRUMENTAL_BROADENING, 
+                   df.A222_fwhm[i] - INSTRUMENTAL_BROADENING]
         fwhm[i] = np.array([float(n) for n in fwhm[i]])
         fwhm[i] = np.array([np.deg2rad(n) for n in fwhm[i]]) # Transforming the fwhm from degree to radians
         
@@ -75,7 +81,7 @@ class DislocationDensityMWH:
         self.a_bcc = 2.87
         self.a_fcc = 3.59
         self.alpha_range = np.arange(0, 1e-3, 1e-8)
-        
+        self.beta_prime_range = np.arange(0, 1e-1, 1e-5)
         
     # Calculating the K values for the different planes
     def k_values(self, angle, fwhm):
@@ -90,7 +96,6 @@ class DislocationDensityMWH:
         for i in SPECTRAS:
             # delta_k[i] = 2 * (np.sin(angle_2[i] - np.sin(angle_1[i]) / self.wavelength))
             delta_k[i] = (2 * np.cos(angle[i]) * fwhm[i]) / self.wavelength
-        
         return dict(k=k, delta_k=delta_k)
     
 
@@ -168,11 +173,11 @@ class DislocationDensityMWH:
             fig.tight_layout()
             
             try:
-                os.mkdir("q_results_plot")
+                os.mkdir(f"q_results_plot_{self.structure}")
             except FileExistsError:
                 pass
             
-            plt.savefig(f"q_results_plot/Measure_{50 + 100 * (key)}.png")
+            plt.savefig(f"q_results_plot_{self.structure}/Measure_{50 + 100 * (key)}.png")
             
             # plt.show()
             
@@ -187,6 +192,7 @@ class DislocationDensityMWH:
     def q_values(self, angle, fwhm):
         
         alpha_values = self.alpha_value(angle, fwhm)
+        alpha = alpha_values["alpha"]
         q = alpha_values["q"]
         r_sq = alpha_values["r_sq"]
         intercept = alpha_values["intercept"]
@@ -288,12 +294,16 @@ class DislocationDensityMWH:
             print(f"f_q_edge for {key}: {100 * float(f_edge[key]):.1f} %")
             print("\n\n")
             
-        return dict(f_edge=f_edge, f_screw=f_screw, q_screw=q_screw, q_edge=q_edge, q=q, A=A, r_sq=r_sq, intercept=intercept)
+        return dict(f_edge=f_edge, f_screw=f_screw, 
+                    q_screw=q_screw, q_edge=q_edge, q=q, 
+                    A=A, r_sq=r_sq, intercept=intercept,
+                    alpha=alpha)
 
     
     def ch00(self, angle, fwhm):
         
         q = self.q_values(angle, fwhm)
+        alpha = q["alpha"]
     
         if self.structure.upper() == "BCC":
             df_ch00_edge = pd.read_csv("abcd_parameters_for_ch00_edge_dislocation_bcc.txt", delimiter=";")
@@ -368,11 +378,12 @@ class DislocationDensityMWH:
         
         ch00 = {key: float(q["f_edge"][key]) * ch00_edge + float(q["f_screw"][key]) * ch00_screw for key, value in q["f_edge"].items()}
  
-        return dict(ch00_edge=ch00_edge, ch00_screw=ch00_screw, ch00=ch00, q=q)
+        return dict(ch00_edge=ch00_edge, ch00_screw=ch00_screw, ch00=ch00, q=q, alpha=alpha)
         
         
     def c(self, angle, fwhm):
         ch00 = self.ch00(angle, fwhm)
+        alpha = ch00["alpha"]
         h_values = self.H_squared()
         c = {}
         for key, value in ch00["ch00"].items():
@@ -381,7 +392,7 @@ class DislocationDensityMWH:
                 l.append(ch00["ch00"][key] * ( 1 - ch00["q"]["q"][key] * h_values[j]))
             c[key] = l
         pprint(c)
-        return c, ch00["q"]["r_sq"], ch00["q"]["intercept"], ch00["q"]["f_edge"], ch00["q"]["f_screw"]
+        return c, ch00["q"]["r_sq"], ch00["q"]["intercept"], ch00["q"]["f_edge"], ch00["q"]["f_screw"], alpha
      
     
     def b(self):
@@ -408,7 +419,7 @@ class DislocationDensityMWH:
         '''
         
         b = self.b()
-        c, r_sq_1, intercept_grain, f_edge, f_screw = self.c(angle, fwhm)
+        c, r_sq_1, intercept_grain, f_edge, f_screw, alpha = self.c(angle, fwhm)
         k = self.k_values(angle, fwhm)
 
         if self.structure.upper() == "BCC":
@@ -445,67 +456,96 @@ class DislocationDensityMWH:
                 fig.tight_layout()
             
                 try:
-                    os.mkdir("dislocation_density_MWH_method_plot")
+                    os.mkdir(f"dislocation_density_MWH_method_plot_{self.structure}")
                 except FileExistsError:
                     pass
                 
-                plt.savefig(f"dislocation_density_MWH_method_plot/Measure_{50 + 100 * (key)}.png")
+                plt.savefig(f"dislocation_density_MWH_method_plot_{self.structure}/Measure_{50 + 100 * (key)}.png")
         
         elif self.structure.upper() == "FCC":
-            Wg = {"111": .43, "200": 1.0, "220": .71, "311": .45}
-            coef = {}
-            intercept = {}
+            Wg = np.array([.43, 1.0, .71, .45, .43]) # for 111, 200, 220, 311, and 222 austenite planes, respectively
+
+            best_beta = {}
             r_sq_2 = {}
-            fig, ax = plt.subplots()
-            for key, value in k["k"].items():
-             
+            a_coef = {}
+            b_coef = {}
+            c_coef = {}
+            
+            def func(x, a, b, c):
+                return a*x**2 + b*x + c
+            
+            p = 0
+            for key, value in k["delta_k"].items():
+                # print(np.array(k["k"][key]) * np.sqrt(np.array(c[key])))
                 x = np.array(k["k"][key]) * np.sqrt(np.array(c[key]))
                 # print(x)    
                 x_ = np.array(x).reshape((-1, 1))
                 # print(x_)
                 new_x = np.linspace(x.min(), x.max(), 1000)
                 
-                
-                y =  (k["delta_k"][key] - beta_prime * Wg[key])**2 - alfa
-                # print(y)
-                model = LinearRegression().fit(x_, y)
-                r_sq_2[key] = model.score(x_, y)
-                intercept[key] = model.intercept_
-                coef[key] = model.coef_
+                best_beta[key] = 0
+                r_sq_2[key] = 0
+                a_coef[key] = 0
+                b_coef[key] = 0
+                c_coef[key] = 0
+                for num in self.beta_prime_range:
+                    y =  np.array(k["delta_k"][key] - num * Wg)
+                    # print(y)
+                    popt, pcov = curve_fit(func, x, y)
+                    
+                    y_pred = func(x, *popt)
+                    r_squared = r2_score(y, y_pred)
+                    print(r_squared)
+                    if r_squared > r_sq_2[key]:
+                        r_sq_2[key] = r_squared
+                        best_beta[key] = num
+                        a_coef[key] = popt[0]
+                        b_coef[key] = popt[1]
+                        c_coef[key] = popt[2]
+                    p += 1
+                    print(f"{p*100/(len(self.beta_prime_range)*len(k['delta_k'].keys())):.2f} %")
+                print(best_beta)
+                print(r_sq_2)
                 
                 fig, ax = plt.subplots()
-                ax.plot(x, y, c="k", marker="o", mfc="white", ls="")
-                ax.plot(new_x, intercept[key] + coef[key]*new_x, c="k")
+                y_value = np.array(k["delta_k"][key] - best_beta[key] * Wg)
+                y_err = 2 * (1 - np.array(r_sq_2[key])) * y_value
+
+                ax.errorbar(x, y_value, yerr=y_err, c="k", marker="o", mfc="white", ls="", capsize=5)
+                ax.plot(new_x, func(new_x, a_coef[key], b_coef[key], c_coef[key]), c="k")
                 ax.set_xlabel(r"K$\overline{C}$$^{1/2}$ (nm$^{-1}$)", size=15)
-                ax.set_ylabel(r"$\Delta K$ (nm$^{-1}$)", size=15)
+                ax.set_ylabel(r"$\Delta K - \beta 'W_{hkl}$ (nm$^{-1}$)", size=15)
                 ax.tick_params(axis="both", labelsize=12)
-                # ax.set_ylim(0, )
-                # ax.annotate(f"Measure: {key}", (0, .01))
+                ax.set_ylim(0, )
+                # # ax.annotate(f"Measure: {key}", (0, .01))
                 ax.ticklabel_format(axis="both", style="sci", scilimits=(0,0), useMathText=True)
                 ax.minorticks_on()
                 fig.tight_layout()
-            
+                # plt.show()
+                
                 try:
-                    os.mkdir("dislocation_density_MWH_method_plot")
+                    os.mkdir(f"dislocation_density_MWH_method_plot_{self.structure}")
                 except FileExistsError:
                     pass
                 
-                plt.savefig(f"dislocation_density_MWH_method_plot/Measure_{50 + 100 * (key)}.png")
+                plt.savefig(f"dislocation_density_MWH_method_plot_{self.structure}/Measure_{50 + 100 * (key)}_{self.structure}.png")
         
-        def rho_f(coef, b, M):
-            return 1e20 * 2 * coef**2 / (b**2 * M**2 * np.pi) #in 1/m²
+        def rho_f(b_coef, b, M):
+            return 1e20 * 2 * b_coef**2 / (b**2 * M**2 * np.pi) #in 1/m²
         
         def std_value(value, r_sq_1, r_sq_2):
             return 2 * value * (1 - (r_sq_1 * r_sq_2))
         
-        rho = {key: rho_f(coef[key], b, M) for key, value in coef.items()}
+        rho = {key: rho_f(b_coef[key], b, M) for key, value in b_coef.items()}
         
         rho_value = {key: {"rho": rho[key], 
                            "std": std_value(rho[key], r_sq_1[key], r_sq_2[key]),
-                           "D": 0.9 / intercept_grain[key],
-                           "std_grain": std_value(intercept_grain[key], r_sq_1[key], r_sq_2[key]),
+                           "D": 0.9 / c_coef[key],
+                           "std_grain": std_value(c_coef[key], r_sq_1[key], r_sq_2[key]),
                            "f_edge": f_edge[key],
-                           "f_screw": f_screw[key]
+                           "f_screw": f_screw[key],
+                           "beta_prime": best_beta[key],
+                           "alpha": alpha[key]
                            } for key, value in rho.items()}
         
         names = [i for i in rho_value.keys()]
@@ -515,23 +555,25 @@ class DislocationDensityMWH:
                    float(rho_value[col]["std"]),
                    float(rho_value[col]["f_edge"]),
                    float(rho_value[col]["f_screw"]),
+                   float(rho_value[col]["beta_prime"]),
+                   float(rho_value[col]["alpha"])
                    ] for col in names]
         files = [i+1 for i in names]
         # print(values)
-        cols = ["D", "std_grain", "rho", "std", "f_edge", "f_screw"]
+        cols = ["D", "std_grain", "rho", "std", "f_edge", "f_screw", "beta_prime", "alpha"]
         
         df = pd.DataFrame(values, columns=cols)
         df["names"] = files
         df.set_index("names", inplace=True)
         print(df)
 
-        df.to_csv("dislocation_density_data.txt", sep=",")
+        df.to_csv(f"dislocation_density_data_{self.structure}.txt", sep=",")
 
-        # pprint(rho_value)
+        pprint(rho_value)
         return rho_value 
 
 
-a = DislocationDensityMWH("BCC")
+a = DislocationDensityMWH("FCC")
 # a.structure = "FCC"
 # k = a.k_values(angle, fwhm)
 # k = k.to_dict()
