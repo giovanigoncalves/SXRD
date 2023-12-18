@@ -31,7 +31,7 @@ df.replace("NP", np.nan, inplace=True)
 
 
 # Chosing one unique diffraction spectra to calc dislocation density (FWHM and angle info)
-SPECTRAS = np.arange(0, 14, 1) # Number of the diffraction data
+SPECTRAS = np.arange(0, 13, 1) # Number of the diffraction data
 INSTRUMENTAL_BROADENING = 0.0160558308639235
 
 fwhm = {}
@@ -242,9 +242,9 @@ class DislocationDensityMWH:
         elif self.structure.upper() == "FCC":
             df_edge = pd.read_csv(f"abcd_parameters_for_q_edge_dislocation_fcc.txt", delimiter=";")
             # c11, c12 and c44 were chosen from F. HajyAkbary et al. (2015) Materials Science & Engineering A 639
-            c11 = 540
-            c12 = 120
-            c44 = 260
+            c11 = 163
+            c12 = 141
+            c44 = 79.6
             
             a_q_screw = 5.4252
             b_q_screw = 0.7196
@@ -476,11 +476,8 @@ class DislocationDensityMWH:
             
             p = 0
             for key, value in k["delta_k"].items():
-                # print(np.array(k["k"][key]) * np.sqrt(np.array(c[key])))
                 x = np.array(k["k"][key]) * np.sqrt(np.array(c[key]))
-                # print(x)    
                 x_ = np.array(x).reshape((-1, 1))
-                # print(x_)
                 new_x = np.linspace(x.min(), x.max(), 1000)
                 
                 best_beta[key] = 0
