@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np 
 
 
-df = pd.read_csv("dislocation_density_data_FCC.txt", sep=",")
+df = pd.read_csv("dislocation_density_data_BCC.txt", sep=",")
 
 fig, ax = plt.subplots()
 ax.errorbar(x=df["names"], y=df["rho"], yerr=df["std"], 
