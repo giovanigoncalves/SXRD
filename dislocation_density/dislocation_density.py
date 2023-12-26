@@ -31,7 +31,7 @@ df.replace("NP", np.nan, inplace=True)
 
 
 # Chosing one unique diffraction spectra to calc dislocation density (FWHM and angle info)
-SPECTRAS = np.arange(0, 21, 1) # Number of the diffraction data
+SPECTRAS = np.arange(16, 17, 1) # Number of the diffraction data
 INSTRUMENTAL_BROADENING = 0.0160558308639235
 
 fwhm = {}
