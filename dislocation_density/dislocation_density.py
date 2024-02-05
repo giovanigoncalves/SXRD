@@ -80,7 +80,7 @@ class DislocationDensityMWH:
         
         self.a_bcc = 2.87
         self.a_fcc = 3.59
-        self.alpha_range = np.arange(0, 1e-3, 1e-9)
+        self.alpha_range = np.arange(0, 1e-4, 1e-9)
         self.beta_prime_range = np.arange(0, 1e-1, 1e-5)
         
     # Calculating the K values for the different planes
@@ -404,17 +404,14 @@ class DislocationDensityMWH:
         if self.structure.upper() == "BCC":
             a = self.a_bcc
             b["111"] = (a / 2) * np.sqrt(1**2 + 1**2 + 1**2)
-        elif self.structure.upper() == "FCC":
-            a = self.a_fcc
-            b["110"] = (a / 2) * np.sqrt(1**2 + 1**2 + 0**2)
-
-        if self.structure.upper() == "BCC":
             print(self.structure)
             return b["111"] # According to ref. T. Ungár et al. (1999) pag. 993 {110}<111>
         elif self.structure.upper() == "FCC":
+            a = self.a_fcc
+            b["110"] = (a / 2) * np.sqrt(1**2 + 1**2 + 0**2)
             print(self.structure)
             return b["110"] # According to ref. T. Ungár et al. (1999) pag. 993 {111}<110>
-        
+
         
     def dislocation_density(self, angle, fwhm, M=1.4):
         '''
@@ -439,17 +436,16 @@ class DislocationDensityMWH:
                 new_x = np.linspace(x.min(), x.max(), 1000)
                 
                 
-                y =  np.array(k["delta_k"][key])
+                y =  k["delta_k"][key]
                 # print(y)
                 try:
                     model = LinearRegression().fit(x_, y) 
                     r_sq_2[key] = model.score(x_, y)
                     intpt[key] = model.intercept_
                     coef[key] = model.coef_
+                    
                     fig, ax = plt.subplots()
                     y_err = 2 * (1 - np.array(r_sq_2[key])) * y
-                    
-                    
                     ax.errorbar(x=x, 
                             y=y, 
                             yerr=y_err,
@@ -490,8 +486,8 @@ class DislocationDensityMWH:
             
             rho_value = {key: {"rho": rho[key], 
                             "std": std_value(rho[key], r_sq_1[key], r_sq_2[key]),
-                            "D": 0.9 / intpt[key],
-                            "std_grain": std_value(intpt[key], r_sq_1[key], r_sq_2[key]),
+                            "D": 0.9 / intercept_grain[key],
+                            "std_grain": std_value(intercept_grain[key], r_sq_1[key], r_sq_2[key]),
                             "f_edge": f_edge[key],
                             "f_screw": f_screw[key],
                             "alpha": alpha[key]
