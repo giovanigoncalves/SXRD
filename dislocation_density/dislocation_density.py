@@ -31,13 +31,13 @@ df.replace("NP", np.nan, inplace=True)
 
 
 # Chosing one unique diffraction spectra to calc dislocation density (FWHM and angle info)
-SPECTRAS = np.arange(0, 21, 1) # Number of the diffraction data
+SPECTRAS = np.arange(7, 8, 1) # Number of the diffraction data
 INSTRUMENTAL_BROADENING = 0.0160558308639235
 
 fwhm = {}
 angle = {}
 
-struc = "BCC"
+struc = "FCC"
 if struc == "BCC":
     for i in SPECTRAS:
         fwhm[i] = [df.M110_fwhm[i] - INSTRUMENTAL_BROADENING, 
@@ -77,7 +77,7 @@ class DislocationDensityMWH:
             self.planes = ["110", "200", "211", "220"] # for BCC structure
         elif self.structure == "FCC":
             self.planes = ["111", "200", "220", "311", "222"] # for FCC structure
-        
+            self.Wg = [0.43, 1.0, 0.71, 0.45, 0.43]
         self.a_bcc = 2.87
         self.a_fcc = 3.59
         self.alpha_range = np.arange(0, 1e-4, 1e-9)
@@ -124,13 +124,13 @@ class DislocationDensityMWH:
         x = np.array(x).reshape((-1, 1))
         new_x = np.arange(0, 1, .01)
 
-
         best_alpha = {}
         best_r_sq = {}
         coef = {}
         intercept = {}
         q = {}
         
+
         p = 0
         for key, value in k["delta_k"].items():
             best_alpha[key] = 0
@@ -139,6 +139,7 @@ class DislocationDensityMWH:
             intercept[key] = 0
             for num in self.alpha_range:
                 y =  (k["delta_k"][key]**2 - num) / k["k"][key]**2
+                
                 model = LinearRegression().fit(x, y)
                 r_sq = model.score(x, y)
                 if (r_sq > best_r_sq[key]):
@@ -163,32 +164,8 @@ class DislocationDensityMWH:
                         linestyle="",
                         marker="o",
                         mfc="white")
+    
 
-            ax.plot(new_x, intercept[key] + coef[key]*new_x, c="k")
-            ax.set_xlabel(r"H$^2$", size=15)
-            ax.set_ylabel(r"$\frac{(\Delta K^2 - \alpha)}{K^2}$", size=18)
-            ax.tick_params(axis="both", labelsize=12)
-            ax.set_ylim(0, )
-            ax.set_xlim(-.05, .7)
-            # ax.annotate(f"Measure: {key}", (0, .01))
-            ax.ticklabel_format(axis="y", style="sci", scilimits=(0,0), useMathText=True)
-            ax.minorticks_on()
-            fig.tight_layout()
-            
-            try:
-                os.mkdir(f"q_results_plot_{self.structure}")
-            except FileExistsError:
-                pass
-            
-            plt.savefig(f"q_results_plot_{self.structure}/Measure_{50 + 100 * (key)}.png")
-            
-            # plt.show()
-            
-            print(f"Best value for {key}: {best_alpha[key]}")
-            print(f"Best r_sq for {key}: {best_r_sq[key]:.2f}")
-            print(f"1/q for {key}: {-1 * intercept[key] / coef[key]}")
-            print(f"q for {key}: {-1 * coef[key] / intercept[key]}")
-   
         return dict(alpha=best_alpha, r_sq=best_r_sq, coef=coef, intercept=intercept, q=q)    
     
     
@@ -203,10 +180,13 @@ class DislocationDensityMWH:
         if self.structure.upper() == "BCC":
             df_screw = pd.read_csv(f"abcd_parameters_for_q_screw_dislocation_bcc.txt", delimiter=";")
             df_edge = pd.read_csv(f"abcd_parameters_for_q_edge_dislocation_bcc.txt", delimiter=";")
-            # c11, c12 and c44 were chosen from F. HajyAkbary et al. (2015) Materials Science & Engineering A 639
-            c11 = 230
-            c12 = 135
-            c44 = 117
+            # c11, c12 and c44 were chosen from "Elastic Properties of Fe–C and Fe–N Martensites"
+            # Maaouia SOUISSI and Hiroshi NUMAKURA
+            # ISIJ International, Vol. 55 (2015), No. 7, pp. 1512–1521
+            
+            c11 = 276.6
+            c12 = 145.8
+            c44 = 97.58
             
             if abs(c12/c44 - 0.5) < abs(c12/c44 - 1) < abs(c12/c44 - 2):
                 a_q_screw = df_screw["c12/c44=0.5"][0]
@@ -286,12 +266,28 @@ class DislocationDensityMWH:
         q_screw = a_q_screw * (1 - np.exp(-A / b_q_screw)) + c_q_screw * A + d_q_screw # constant value for 100% screw dislocations
         q_edge = a_q_edge * (1 - np.exp(-A / b_q_edge)) + c_q_edge * A + d_q_edge # constant value for 100% edge dislocations
 
+        
         f_edge = {}
         f_screw = {}
         for key in q:
-            f_edge[key] = ( q_screw - q[key] ) / ( q_screw - q_edge )  
-            f_screw[key] = 1 - f_edge[key]
+            if q[key] < q_edge:
+                f_edge[key] = 1
+                f_screw[key] = 0
+            elif q[key] > q_screw:
+                f_edge[key] = 0
+                f_screw[key] = 1
+            else:
+                f_edge[key] = ( q_screw - q[key] ) / ( q_screw - q_edge )  
+                f_screw[key] = 1 - f_edge[key]
 
+            print("\n\n")
+            
+            
+            print(f"q_screw: {q_screw}")
+            print(f"q_edge: {q_edge}")
+            print(f"q_exp: {q[key]}")
+            
+            
             print("\n\n")
             print(f"f_q_screw for {key}: {100 * float(f_screw[key]):.1f} %")
             print(f"f_q_edge for {key}: {100 * float(f_edge[key]):.1f} %")
@@ -473,8 +469,7 @@ class DislocationDensityMWH:
                     plt.savefig(f"dislocation_density_MWH_method_plot_{self.structure}/Measure_{50 + 100 * (key)}.png")
                 except ValueError:
                     pass
-               
-                
+                       
                 
             def rho_f(coef, b, M):
                 return 1e20 * 2 * coef**2 / (b**2 * M**2 * np.pi) #in 1/m²
@@ -604,7 +599,8 @@ class DislocationDensityMWH:
             # print(values)
             cols = ["D", "std_grain", "rho", "std", "f_edge", "f_screw", "beta_prime", "alpha"]
       
-        
+         
+            
         # Thus...
         df = pd.DataFrame(values, columns=cols)
         df["names"] = files
@@ -617,7 +613,7 @@ class DislocationDensityMWH:
         return rho_value 
 
 
-a = DislocationDensityMWH("BCC")
+a = DislocationDensityMWH("FCC")
 # a.structure = "FCC"
 # k = a.k_values(angle, fwhm)
 # k = k.to_dict()
