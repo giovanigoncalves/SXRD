@@ -31,7 +31,7 @@ df.replace("NP", np.nan, inplace=True)
 
 
 # Chosing one unique diffraction spectra to calc dislocation density (FWHM and angle info)
-SPECTRAS = np.arange(7, 8, 1) # Number of the diffraction data
+SPECTRAS = np.arange(1, 15, 1) # Number of the diffraction data
 INSTRUMENTAL_BROADENING = 0.0160558308639235
 
 fwhm = {}
@@ -81,7 +81,7 @@ class DislocationDensityMWH:
         self.a_bcc = 2.87
         self.a_fcc = 3.59
         self.alpha_range = np.arange(0, 1e-4, 1e-9)
-        self.beta_prime_range = np.arange(0, 1e-1, 1e-5)
+        self.beta_prime_range = np.arange(0, 1e-3, 1e-7)
         
     # Calculating the K values for the different planes
     def k_values(self, angle, fwhm):
@@ -142,7 +142,7 @@ class DislocationDensityMWH:
                 
                 model = LinearRegression().fit(x, y)
                 r_sq = model.score(x, y)
-                if (r_sq > best_r_sq[key]):
+                if (r_sq > best_r_sq[key]) & (r_sq < 1):
                     best_r_sq[key] = r_sq
                     best_alpha[key] = num
                     coef[key] = model.coef_

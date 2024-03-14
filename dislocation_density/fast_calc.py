@@ -24,8 +24,11 @@ q_screw = a_q_screw * (1 - np.exp(-A / b_q_screw)) + c_q_screw * A + d_q_screw
 
 q_edge = a_q_edge * (1 - np.exp(-A / b_q_edge)) + c_q_edge * A + d_q_edge
 
-print("\n\n")
-print(f"A: {A:.2f}")
-print(f"Screw: {q_screw:.2f}")
-print(f"Edge: {q_edge:.2f}")
-print("\n\n")
+# print("\n\n")
+# print(f"A: {A:.2f}")
+# print(f"Screw: {q_screw:.2f}")
+# print(f"Edge: {q_edge:.2f}")
+# print("\n\n")
+
+if 1 < 2 & 3 < 4:
+    print("ok")
