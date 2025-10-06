@@ -8,15 +8,15 @@ This guide explains how to **synchronize dilatometry data** with **diffraction i
 ## ⚙️ Executable
 Use the provided executable:
 
-```
+
 p07_sync_dila.exe
-```
+
 
 Alternatively, you can run the Python script:
 
-```
+
 python p07_sync_dila.py
-```
+
 
 ---
 
@@ -46,9 +46,9 @@ If all files are correctly placed, the program will generate:
   - ⚙️ *Time vs Force*
 - 📄 **A synchronized data file** named:
 
-```
+
 ...sync_file.txt
-```
+
 
 ---
 

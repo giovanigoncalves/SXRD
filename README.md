@@ -28,7 +28,7 @@ This tool allows users to align experimental measurements in time, making it eas
 Calculates the **dislocation density** from given **Full Width at Half Maximum (FWHM)** values.  
 To use this module, the user must first **refine the diffraction data** and obtain **FWHM results** (e.g., from peak fitting or Rietveld analysis).
 
-We recommend using the open-source software **[Pydidas](https://github.com/hereon-github/pydidas)** (also developed by Hereon) for this purpose.
+We recommend using the open-source software **[Pydidas](https://github.com/hereon-GEMS/pydidas)** (also developed by Hereon) for this purpose.
 
 📘 **Documentation:** See the [`dislocation_density` README](./dislocation_density/README.md) for further details.
 
